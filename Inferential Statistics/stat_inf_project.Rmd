@@ -1,0 +1,179 @@
+---
+title: "Statistical inference with the GSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(tidyr)
+library(scales)
+library(ggthemes)
+```
+
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+* * *
+
+## Part 1: Data
+
+The GSS gathers data to seek to monitor and explain trends in American attitudes, behaviors, and attributes. Data is gathered via in-person interviews that average 90 minutes in length.  All U.S. households had an equal chance of being selected. 
+
+While the chance to be selected is random, actual responders are likely not random.  First, 90 minutes is long.  I anticipate a bias toward people who have more free time such as older Americans without young kids.  Second, many potential interviees may view the interviewers as security risks, so I anticipate a bias toward stronger individuals and/or men.  Third, many people will not be willing to share such personal information with a stranger so a bias may exist toward parts of the country in which openness is more common.  Fourth, the survey focuses on households so ignores homeless citizens.
+
+For above reasons, causality cannot be inferred to all citizens in the United States.
+
+* * *
+
+## Part 2: Research question
+
+I am interested in  whether Americans' views on assisted suicide for individuals with incurable diseases are dependent on whether the respondent states a with a religious affiliation.
+
+My interest stems from two factors.  First, I recently watched my mother suffer from pancreatic cancer.  She was miserable when could no longer receive treatment and wanted to die.  Second, I am empathetic with my mother but feel conflicted from my Christian belief that the decision to die sits with God.
+
+For this study, I will leverage the above GSS study using the most recent study period of 2012.  The field SUICIDE2 contains information on the respondent's view on assisted suicide for patients with terminal conditions and RELIG the respondent's religious preference.
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+```{r}
+
+gss %>%
+  filter (year == 2012, !is.na(suicide2)) %>%
+  group_by (suicide2) %>%
+  summarize (n = n()) %>%
+  mutate (pct = n/sum(n))
+
+```
+
+
+
+```{r}
+
+gss %>%
+  filter (year == 2012, !is.na(suicide2)) %>%
+  ggplot (aes (x=suicide2)) +
+    geom_bar (aes(y = (..count..)/sum(..count..))) +
+    theme_economist() + 
+    ggtitle ("% Americans supporting suicide for terminal conditions (2012)") +
+        theme(plot.title = element_text(size = 12, face = "bold")) +
+    xlab (NULL) +
+    ylab (NULL) + 
+    scale_y_continuous(labels=percent) 
+
+```
+
+A majority of Americans are against assisted suicide for patients with terminal conditions.  Only 11% are expressly in favor of the option.
+
+```{r}
+
+gss %>%
+  filter (year == 2012, !is.na (relig), !is.na(suicide2)) %>%
+  mutate (religious = if_else(relig == "None", "No", "Yes")) %>%
+  group_by (religious, suicide2) %>%
+  summarize (n = n()) %>%
+  mutate (pct = n/sum(n)) %>%
+  select (-n) -> gss_summ
+
+gss_summ %>%
+  spread (suicide2, pct)
+  
+```  
+  
+
+```{r}
+gss %>%
+  filter (!is.na (relig), !is.na(suicide2)) %>%
+  mutate (religious = if_else(relig == "None", "No", "Yes")) %>%
+  filter (year == 2012 & religious == "Yes") %>%
+  ggplot (aes (x=suicide2)) +
+    geom_bar (aes(y = (..count..)/sum(..count..))) +
+    theme_economist() + 
+    ggtitle ("% religious Americans supporting suicide for terminal conditions (2012)") +
+        theme(plot.title = element_text(size = 12, face = "bold")) +
+    xlab (NULL) +
+    ylab (NULL) + 
+    scale_y_continuous(labels=percent) 
+
+```
+
+The % of Americans against assisted suicide for patients with terminal conditions differ between those religious (23%) and not identifying themselves as religious (8%).
+
+```{r}
+gss %>%
+  filter (year == 2012) %>%
+  group_by (relig, suicide2) %>%
+  summarize (n = n()) %>%
+  mutate (pct = n/sum(n)) %>%
+  filter (suicide2 == "Yes") %>%
+  select (-n, -suicide2) %>%
+  ggplot (aes (x=reorder(relig, pct), y = pct)) +
+    geom_col () +
+    theme_economist() + 
+    ggtitle ("%  Americans supporting suicide for terminal conditions by religious preference (2012)") +
+        theme(plot.title = element_text(size = 11, face = "bold")) +
+    xlab (NULL) +
+    ylab (NULL) + 
+    scale_y_continuous(labels=percent) +
+    theme(axis.text.x=element_text(angle = -90, hjust = 0))
+```
+
+The % of Americans against assisted suicide for patients with terminal conditions varies within relgions.  Other European is the highest at 20% with Catholic the lowest at 5%. 
+* * *
+
+## Part 4: Inference
+
+I selected a Chi-squared test for independence because two categorical variables (religious affiliation, support for assisted suicide with a terminal condition) with multiple levels for each.  I am using a 95% critical value.
+
+My inference study will be a hypothesis test instead of a confidence interval because I have two categorical variables, one of which has more than two levels. 
+
+The null hypothesis is that support for assisted suicide for patients with terminal conditions does not depend on stated religious preference.  The alternate hypothesis is that support for assisted suicide for patients with terminal conditions does depend on religious preference.
+
+If the study shows a p value below than the 95% critical corresponding value, the null hypothesis cannot be rejected.  That would infer no association between  religious preference and support for assisted suicide for patients with a terminal condition.  Inversely, if the study shows a p value above the 95% critical corresponding value, the null hypothesis can be rejected.  That would infer an association between religious preference and support for assisted suicide for patients with a terminal condition.
+
+The conditions for testing are twofold.  The first is a random sample from the U.S. population.  As discussed in the Data section above, the GSS study is not fully random so inference conclusions from the study need to be tempered.  Second, data in count buckets need to be ≥ 5.  Some buckets for specific religious preferences are indeed less than 6.  I contemplated combining the religions with small sample size into an Other category.  However, I decided would be non-sensical because these religions have very different beliefs so removed from the study.
+
+```{r}
+
+gss_table <- table (gss$suicide2,gss$relig)
+gss_table
+
+chisq.test(gss_table)
+
+```
+
+The count of American of preferences for specific religions is below 5 so violates one of the required conditions.  As stated above, I contemplated combining the religions with small sample size into an Other category.  However, I decided would be non-sensical because these religions have very different beliefs so removed from the study. 
+
+
+```{r}
+
+gss$relig2 <- as.character (gss$relig)
+
+gss2 <- gss %>%
+  filter (relig2 == "Catholic" | relig2 == "Christian" | relig2 == "Protestant" | relig2 == "Jewish")
+
+gss_table <- table (gss2$suicide2,gss2$relig2)
+gss_table
+
+chisq.test(gss_table)
+
+```
+
+The Chi-squared test for independence still has an insignificant p value for religions and support of assisted suicide.  That implies insufficient evidence to reject the null hypothesis that religious preference has an association with support for assisted suicide for patients with terminal conditions.  In short, no support that religious preference associates with support for assisted suicide.
+
+Chi-squared tests for independence using hypothesis tests are the only tests I am aware of for two categorical variables with one having multiple levels.  I am unaware of what else could be compared with the study results.
+
+Future studies could potentially run chi-squared tests of independence on other potential variables such as region of country, age and income.  That said, I would be wary of insightfulness of such studies due to the lack of randomness in surveying Americans as noted in data section above.
