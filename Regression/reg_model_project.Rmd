@@ -1,0 +1,228 @@
+---
+title: "Modeling and prediction for movies"
+output:
+  html_document:
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+  pdf_document: default
+  word_document: default
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(ggthemes)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `movies`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+The data set is from an observational study with information on a random sample of movies released in theaters betweewn 1970 and 2014.  The information sources are Rotten Tomatoes and IMDB Web sites.  Both are well-known movie information aggregators with data on a large volume of movies.
+
+While the data set sampling from the site  is listed as random sampling, audience scores for specific movies on the sites are not randomly selected.  Scores are entered by visitors to the Web sites. The audience raters are self-selected so the sample may be biased toward moviegoers who frequent these specific sites, who had a strong positive or negative reactions, movie buffs and younger people who spend more time on the Web.  As such causality and genearalizability cannot be inferred.
+
+Furthermore, there is no guarantee the audience raters actually watched the movie.  They could be fans of the cast in a positive or negative way.  Or they could be affiliates of the movie studio seeking to promote the film (or of a rival studio seeking to lower attendance).
+
+* * *
+
+## Part 2: Research question
+
+I am a keen movie buff who worked briefly in the industry after college so anything related to movies is fascinating for me!
+
+For this specfic project, I am interested to learn what factors have significant correlations with overall audience appreciation for a movie.  Audience_score will be the response variable, albeit with limitations described in part 1.
+
+One hypothetized predictive factor is whether average critic ratings (critic_rating) has an association with average audience score.  Critics' opinions influence my interest in seeing a movie and I am curious whether similar with the overall audience in the study.
+
+Another study predictivre factor will be genre. Audiences' like of a movie may be partially driven by the genre itself.  For example, someone who dislikes horror movies or musicals may dislike all such films all else equal.
+
+The final study predictive factor will be MPAA rating. Audiences' like of a movie may be partially driven by the MPAA rating.  For example, someone offended by sex or violent scenes in an R movie may dislike all such films all else equal. 
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+```{r}
+
+movies %>%
+  group_by (genre) %>%
+  na.exclude() %>%
+  summarize (med=median (audience_score), sd = sd (audience_score), n = n ()) %>%
+  mutate_if (is.numeric, round, 1) %>%
+  arrange (-med)
+```
+
+Median audience rating by genre ranges from 47 to 86 so genre seems to be a possible audience score predictor variable.  Audiences have the highest rating for documentaries and musicals - with least for comedy and science fiction.  Standard deviation is generally in the 19-20 range with exceptions of documentaries and musicals (lower standard deviation) along with science fiction (higher standard deviation). 
+
+
+```{r}
+
+movies %>%
+  group_by (mpaa_rating) %>%
+  na.exclude() %>%
+  summarize (med=median (audience_score), sd = sd (audience_score), n = n ()) %>%
+  mutate_if (is.numeric, round, 1) %>%
+  arrange (-med)
+```
+
+Median audience rating by MPAA rating ranges from 56 to 81 so MPAA rating seems to be a possible audience score predictor variable.  Standard deviation is generally consistent at 19-20 outside of NC-17 (only 2 such movies so less statistically significant) and unrated (a likely hodgepodge of different types of movies).
+
+
+```{r}
+
+movies %>%
+  group_by (critics_rating) %>%
+  na.exclude () %>%
+  summarize (med=median (audience_score), sd = sd (audience_score), n = n ()) %>%
+  mutate_if (is.numeric, round, 1) %>%
+  arrange (-med)
+```
+
+Median audience rating by critics rating ranges from 48 to 81 so average critic rating seems to be a possible audience score predictor variable. This implies may be correlation between how critics like a movie and how the general population likes the same movie.  Standard deviation is also materially different by group as ranges from 11 to 18.  
+
+```{r}
+
+movies %>%
+  group_by (thtr_rel_month) %>%
+  na.exclude() %>%
+  summarize (med=median (audience_score), sd = sd (audience_score), n = n ()) %>%
+  mutate_if (is.numeric, round, 1) %>%
+  arrange (-med)
+```
+
+```{r}
+movies %>%
+  ggplot (aes (x=critics_score, y=audience_score)) +
+    geom_point () +
+    geom_smooth () +
+    theme_economist() + 
+    ggtitle ("Audience score vs. critics_rating")
+```
+
+The above scatterplot implies a potential positive strong relationship (with minimal variation) between average critic score and average audience score.
+
+* * *
+
+## Part 4: Modeling
+
+I am including four variables in my model selection in developing a parsimonious model - the movie genre, MPAA rating, critic score and theater release month. I will perform the backward elimination adjusted R squared testing.
+
+To accomplish, I will calculate adjusted r-squared for all potential predictor values and compare the adjusted R squared vs. removing each predicdtor variable in isolation.  If the adjusted r-squared is higher for any models removing one variable, I will then test removing each remaining variable until adjusted r-squared is maximized.
+
+```{r}
+m1 <- lm(formula = audience_score ~ genre + mpaa_rating + critics_score + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+  
+m1 <- lm(formula = audience_score ~ mpaa_rating + critics_score + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+  
+m1 <- lm(formula = audience_score ~ genre + critics_score + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+  
+m1 <- lm(formula = audience_score ~ genre + mpaa_rating + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+  
+m1 <- lm(formula = audience_score ~ genre + mpaa_rating + critics_score, data = movies)
+  summary(m1)$adj.r.squared
+  
+```
+
+The highest adjusted r-squared is with the model without mpaa_rating.  So I will use that model with genre, theater release month and critic score as the next base for removing predictor variables one-by-one to identify the highest adjusted r-squared.
+
+```{r}
+m1 <- lm(formula = audience_score ~ genre + critics_score + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+
+m1 <- lm(formula = audience_score ~ critics_score + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+
+m1 <- lm(formula = audience_score ~ genre + thtr_rel_month, data = movies)
+  summary(m1)$adj.r.squared
+
+m1 <- lm(formula = audience_score ~ genre + critics_score, data = movies)
+  summary(m1)$adj.r.squared
+  
+```
+
+The highest adjusted r-squared is with the model without mpaa_rating.  So I will use the model with genre and critics score as the next base for removing predictor variables one-by-one to identify the highest adjusted r-squared.  Averge critic ratings seems to be the most impactful associated factor as adjusted r-squared is only slightly higher (.519) when genre is removed.
+
+```{r}
+m1 <- lm(formula = audience_score ~ genre + critics_score, data = movies)
+  summary(m1)$adj.r.squared
+  
+m1 <- lm(formula = audience_score ~ critics_score, data = movies)
+  summary(m1)$adj.r.squared
+
+m1 <- lm(formula = audience_score ~ genre, data = movies)
+  summary(m1)$adj.r.squared
+
+```
+
+```{r}
+m1 <- lm(formula = audience_score ~ genre + critics_score, data = movies)
+  summary(m1)
+  
+```
+The model shows an F-statistic p-value of near zero so very low likelihood that the predictive values have no impact.
+
+While including genre overall does increase the adjusted r-squared, select individual genres are not statistically significant.  Only documentaries, horror and musicals are statistically significant.  
+
+### Multiple regression diagnostics
+
+1.  Check for linear relationships between explanatory and response variables.  Critics score is the only quantitative variable so is only required test.  The data shows a generally random scatter around zero.  Condition is met.
+ 
+```{r}
+plot (m1$residuals ~ movies$critics_score)
+```
+
+2.  Check for nearly normal residuals with mean 0.  Residuals do seem normally distributed at 0 with only a slight skew to the right.  Condition is met.
+ 
+```{r}
+hist (m1$residuals)
+qqnorm(m1$residuals)
+```
+3.  Check for constant variability of residuals.  Vairance is a constant at high level but does seem narrower at higher score levels.  Hence the condition is generally met but does show some heteroscedasticity at high scores.
+ 
+```{r}
+plot(m1$residuals ~ m1$fitted.values)
+plot(abs(m1$residuals) ~ m1$fitted.values)
+```
+
+* * *
+
+## Part 5: Prediction
+
+
+```{r}
+cloverfield <- data.frame (critics_score = 90, genre = "Horror")
+predict (m1, cloverfield, interval = "confidence")
+  
+```
+
+The movie 10 Cloverfield Lane earned a critics score of 90, audience score of 79 and was categorized in the horror genre.  The model predicted an audience score of 78, which is very close to the actual score of 79 amd within the prediction interval of 76.9 to 80.2.
+
+* * *
+
+## Part 6: Conclusion
+
+I have learned that critic rating is the primary statistically significant predictor variable to audience score.  Genre is a secondary contributor with specific genres more statistically significant.  Conditions for multiple regression are generally met with a small amount of heteroscedasticity at high audience scores.
+
+The model could have higher predictive value with a randomly generated observational study.
